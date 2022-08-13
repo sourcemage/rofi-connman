@@ -1,0 +1,513 @@
+#!/usr/bin/env sh
+#             __ _
+#  _ __ ___  / _(_)       ___ ___  _ __  _ __  _ __ ___   __ _ _ __
+# | '__/ _ \| |_| |_____ / __/ _ \| '_ \| '_ \| '_ ` _ \ / _` | '_ \
+# | | | (_) |  _| |_____| (_| (_) | | | | | | | | | | | | (_| | | | |
+# |_|  \___/|_| |_|      \___\___/|_| |_|_| |_|_| |_| |_|\__,_|_| |_|
+#
+# Author: Vlad Glagolev
+#
+# A script that generates a rofi menu that uses connmanctl to
+# connect to network services and display status info.
+#
+# Inspired by:
+# - rofi-bluetooth (https://github.com/nickclyde/rofi-bluetooth)
+# - connman_dmenu (https://github.com/march-linux/connman_dmenu)
+# - networkmanager-dmenu (https://github.com/firecat53/networkmanager-dmenu)
+#
+# Depends on:
+# - rofi or dmenu
+# - connman (contains connmanctl)
+# - empty
+#
+# Utilities:
+# - awk
+# - expr
+
+# ----------+
+# Constants |
+
+divider="---------"
+goback="Back"
+
+readonly scan_result="/tmp/connman.scan"
+
+# ---------+
+# Commands |
+
+# primary menu command
+rofi=${ROFI_COMMAND:-"rofi -dmenu -no-fixed-num-lines -no-custom -yoffset -100 -i -p"}
+# regular prompt
+rofi_prompt=${ROFI_PROMPT_COMMAND:-"rofi -dmenu -l 0 -p"}
+# password prompt
+pin_prompt=${PIN_PROMPT_COMMAND:-"rofi -dmenu -l 0 -password -p"}
+
+# ----------+
+# Utilities |
+
+awk="awk"
+
+# -----------------+
+# Helper functions |
+
+# $1 = msg
+rofi_notify() {
+  : | $rofi_prompt "$1 (press Enter)"
+}
+
+# $1 = index
+index_to_name() {
+  [ -f "$scan_result" ] || return 1
+
+  $awk -v line="$1" 'NR == line { print $2 }' "$scan_result"
+}
+
+# $1 = index
+index_to_service() {
+  [ -f "$scan_result" ] || return 1
+
+  $awk -v line="$1" 'NR == line { print $3 }' "$scan_result"
+}
+
+# $1 = service id
+get_service_security() {
+  printf "$1" | cut -d _ -f 5
+}
+
+# $1 = service id
+get_service_signal() {
+  get_service_info "$1" "Strength"
+}
+
+# $1 = service id
+get_service_state() {
+  get_service_info "$1" "State"
+}
+
+# $1 = service id
+get_service_autoconnect() {
+  get_service_info "$1" "AutoConnect"
+}
+
+# $1 = service id
+get_service_favorite() {
+  get_service_info "$1" "Favorite"
+}
+
+# $1 = service id
+get_service_name() {
+  get_service_info "$1" "Name"
+}
+
+# $1 = service id, $2 = field
+get_service_info() {
+  connmanctl services "$1" | $awk -v field="$2" '$1 == field { print $3 }'
+}
+
+get_services() {
+  [ -f "$scan_result" ] || return 1
+
+  local order=1
+  local name
+  local service_id
+  local security
+  local signal
+  local online
+  local autoconnect
+
+  while read -r flags name service_id; do
+    security=''
+    signal=''
+    online=''
+
+    case "$flags" in
+      *[RO]*)
+        online='(online)'
+      ;;
+    esac
+
+    case "$flags" in
+      *[A]*)
+        online+=' *'
+      ;;
+    esac
+
+    case "$service_id" in
+      wifi_*)
+        security="$(get_service_security "$service_id")"
+        signal="$(get_service_signal "$service_id")"
+      ;;
+      vpn_*)
+        security='vpn'
+      ;;
+    esac
+
+    printf '%4s  %-50s%9s %-3s %s\n' "$order" "$name" "$security" "$signal" "$online"
+
+    (( order++ ))
+  done < "$scan_result"
+}
+
+# Checks if wifi technology is powered on
+power_on() {
+  if [ "$(connmanctl technologies | $awk '/Type = wifi/ { getline; print $3 }')" == "True" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Toggles power state
+toggle_power() {
+  if power_on; then
+    connmanctl disable wifi
+  else
+    connmanctl enable wifi
+  fi
+
+  [ "$1" == "quiet" ] || show_menu
+}
+
+# Perform a scan
+rescan() {
+  connmanctl scan wifi &
+  printf "Scanning...\n"
+  sleep 5
+  show_menu
+}
+
+# Parse services
+parse_services() {
+  if [ -f "$scan_result" ]; then
+    rofi_notify 'another rofi-connman is running'
+
+    exit 1
+  fi
+
+  trap "rm -f $scan_result" EXIT
+
+  refresh_services
+}
+
+# Refresh services
+refresh_services() {
+  connmanctl services | $awk '{ flags=substr($0, 0, 3);
+                                ln=substr($0, 5, length - 4);
+                                service_id=$NF; $NF="";
+                                match(service_id, /wifi_[0-9a-f]+_(hidden_.+)/, sid);
+                                length(sid[1]) != 0 ? name=sid[1] : name=substr(ln, 0, length(ln) - length(service_id));
+                                gsub(/\s+$/, "", name);
+                                gsub(/[^a-zA-Z0-9-]/, "_", name);
+                                gsub(/\s/, "-", flags);
+                              } { print flags, name, service_id }' > "$scan_result"
+}
+
+# Checks if a service is insecure
+insecure_on() {
+  if [ "$(get_service_security "$service")" == "none" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Checks if a service is autoconnected
+autoconnect_on() {
+  if [ $(get_service_autoconnect "$service") == "True" ]; then
+    printf "Autoconnect: on\n"
+
+    return 0
+  else
+    printf "Autoconnect: off\n"
+
+    return 1
+  fi
+}
+
+# Toggles Autoconnect
+toggle_autoconnect() {
+  if autoconnect_on; then
+    autoconnect="no"
+  else
+    autoconnect="yes"
+  fi
+
+  connmanctl config "$service" --autoconnect "$autoconnect"
+
+  service_menu "$service"
+}
+
+# Checks if a service is in favorites
+favorite_on() {
+  if [ "$(get_service_favorite "$service")" == "True" ]; then
+    printf "Favorite: yes\n"
+
+    return 0
+  else
+    printf "Favorite: no\n"
+
+    return 1
+  fi
+}
+
+# Removes a service, noop otherwise
+toggle_favorite() {
+  if favorite_on; then
+    connmanctl config "$service" --remove
+  fi
+
+  service_menu "$service"
+}
+
+# Checks if a service is hidden
+hidden_on() {
+  if [ -z "$(get_service_name "$service")" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Service connection
+service_connect() {
+  if favorite_on || (insecure_on && ! hidden_on); then
+    connmanctl connect "$service"
+  else
+    service_connect_advanced "$service"
+  fi
+}
+
+# Service connection (advanced)
+service_connect_advanced() {
+  empty -f connmanctl
+
+  sleep 1
+
+  empty -s "agent on\n"
+  empty -w "Agent registered" "connect ${service}\n"
+
+  rc=$?
+
+  if hidden_on; then
+    empty_check $rc 1 && empty -w "Hidden SSID name\?"
+
+    if empty_check $? 1; then
+      ssid=$($rofi_prompt "SSID")
+
+      rcp=$?
+
+      [ $rcp -eq 1 ] && return 1
+
+      printf "${ssid}\n" | empty -s
+    fi
+
+    if ! insecure_on; then
+      empty_check $rcp 0 && empty -w "Passphrase\?"
+
+      rc=$?
+    else
+      rc=$rcp
+    fi
+
+    [ $rcp -eq 1 ] && return 1
+  else
+    empty_check $rc 1 && empty -w "Passphrase\?"
+
+    rc=$?
+  fi
+
+  rc=$rc
+
+  if ! insecure_on; then
+    if empty_check $rc 1; then
+      pin=$($pin_prompt "Password")
+
+      rcp=$?
+
+      [ $rcp -eq 1 ] && return 1
+
+      printf "${pin}\n" | empty -s
+    fi
+  else
+    rcp=$rc
+  fi
+
+  empty_check $rcp 0 && empty -w "Connected ${service}" "quit\n"
+  empty_check $? 1
+
+  return $?
+}
+
+empty_check() {
+  if [ $1 -eq $2 ]; then
+    return 0
+  else
+    if [ $2 -eq 0 ]; then
+      printf "Cancelled\n" >&2
+    else
+      printf "Error while communicating to connman\n" >&2
+    fi
+
+    empty -k && return 1
+  fi
+}
+
+# Checks if a service is connected
+service_connected() {
+  case "$(get_service_state "$service")" in
+    online|ready)
+      return 0
+    ;;
+    *)
+      return 1
+    ;;
+  esac
+}
+
+# Toggles service connection
+toggle_connection() {
+  if service_connected "$service"; then
+    connmanctl disconnect "$service"
+
+    service_menu "$service"
+  else
+    service_connect "$service"
+
+    if hidden_on; then
+      show_menu
+    else
+      service_menu "$service"
+    fi
+  fi
+}
+
+# Prints a short string with the current connection status
+# Useful for status bars like polybar, etc.
+print_status() {
+  icon=""
+
+  if power_on; then
+    status=$(connmanctl services | $awk '{ flags=substr($0, 0, 3); } flags ~ /[OR]/ { split($3, sec, "_");
+                                           if (NR > 1) { printf "," }; printf " %s (%s)", $2, sec[1] } END { printf "" }')
+
+    # colorize icon
+    expr "$status" : '.*(vpn)' > /dev/null && icon="" icon="%{F#55aa55}${icon}%{F-}"
+  else
+    icon="%{F#555}${icon}%{F-}"
+  fi
+
+  printf "%s\n" "${icon}${status}"
+}
+
+# A submenu for a specific service
+service_menu() {
+  service="$1"
+
+  exit="Exit"
+
+  # Get service name
+  service_name="$(get_service_name "$service")"
+
+  hidden_on && service_name="(hidden)"
+
+  # Build options
+  if service_connected "$service"; then
+    connected="Connected: yes"
+  else
+    connected="Connected: no"
+  fi
+
+  autoconnect="$(autoconnect_on "$service")"
+  favorite="$(favorite_on "$service")"
+
+  options="${connected}\n${autoconnect}\n${favorite}\n${divider}\n${goback}\n${exit}"
+
+  # Open rofi menu, read chosen option
+  chosen="$(printf "$options" | $rofi "$service_name")"
+
+  # Match chosen option to command
+  case $chosen in
+    "" | $divider)
+      printf "No option chosen.\n"
+    ;;
+    $connected)
+      toggle_connection "$service"
+    ;;
+    $autoconnect)
+      toggle_autoconnect "$service"
+    ;;
+    $favorite)
+      toggle_favorite
+    ;;
+    $goback)
+      show_menu
+    ;;
+  esac
+}
+
+# Opens a rofi menu with current network status and options to connect
+show_menu() {
+  refresh_services
+
+  exit="Exit"
+
+  # Get menu options
+  if power_on; then
+    power="Power: on"
+
+    # Human-readable names of services, one per line
+    services="$(get_services)"
+
+    # Build options
+    scan="Rescan"
+
+    # Options passed to rofi
+    options="${services}\n${divider}\n${power}\n${scan}\n${exit}"
+  else
+    power="Power: off"
+
+    options="${power}\n${exit}"
+  fi
+
+  # Open rofi menu, read chosen option
+  chosen="$(printf "$options" | $rofi "Connman")"
+
+  # Match chosen option to command
+  case $chosen in
+    "" | $divider)
+      printf "No option chosen.\n"
+    ;;
+    $power)
+      toggle_power
+    ;;
+    $scan)
+      rescan
+    ;;
+    $exit)
+      :
+    ;;
+    *)
+      index=$(printf "$chosen" | $awk '{ print $1 }')
+      service=$(index_to_service $index)
+
+      if expr "$(connmanctl services "$service")" : "/net/connman/service/${service}" > /dev/null; then
+        # Open a submenu if a service is selected
+        service_menu "$service"
+      fi
+    ;;
+  esac
+}
+
+parse_services
+
+case "$1" in
+  --status)
+    print_status
+  ;;
+  --toggle)
+    toggle_power quiet
+  ;;
+  *)
+    show_menu
+  ;;
+esac
