@@ -1,40 +1,67 @@
 <div align="center">
-<h3>rofi-bluetooth</h3>
-<img src="https://github.com/ClydeDroid/rofi-bluetooth/raw/master/.meta/menu.gif">
+<h3>rofi-connman</h3>
+<a href="https://github.com/sourcemage/rofi-connman/raw/master/.meta/demo.mp4">
+<img src="https://github.com/sourcemage/rofi-connman/raw/master/.meta/prev.gif">
+</a>
 
-`bluetoothctl` `rofi` `dmenu`
+`connmanctl` `rofi` `dmenu` `empty`
 
 </div>
 
+## About
+
+**rofi-connman** is a graphical frontend for `connman`, lightweight network connection manager. It's an excellent choice for those who want to have a flexible menu-driven network configuration tool without hassle and unnecessary dependencies other network managers require.
+
+**rofi-connman** was designed with speed in mind to be able to display over 5000 NordVPN profiles with no significant delay.
+
+## Features
+
+**rofi-connman** is in early development, so only basic functionality is supported so far:
+
+1. Connecting to secure Wi-Fi networks
+1. Connecting to unprotected Wi-Fi networks
+1. Connecting to hidden Wi-Fi networks
+1. Connecting to pre-defined VPN networks
+1. Custom commands for main menu, prompt and PIN prompt (so `rofi` can easily be replaced with `dmenu`)
+1. Wi-Fi network info (name, signal strength, state, security level, autoconnect status, favorites)
+1. Bar status mode (for bars like [polybar](https://github.com/polybar/polybar))
+1. Aims for full POSIX compliance
+
 ## Installation
 
-Install from [AUR (rofi-bluetooth-git)](https://aur.archlinux.org/packages/rofi-bluetooth-git/), or:
-
-1. Install dependencies: [rofi](https://github.com/davatorium/rofi) and bluetoothctl (provided by `bluez-utils` in Arch)
-1. `git clone git@github.com:ClydeDroid/rofi-bluetooth.git`
-1. `cd rofi-bluetooth`
-1. `./rofi-bluetooth`
+1. Install dependencies: [rofi](https://github.com/davatorium/rofi), `connmanctl` (provided by [connman](https://www.kernel.org/pub/linux/network/connman/)) and `empty` (provided by [empty](http://empty.sourceforge.net/))
+1. `git clone git@github.com:sourcemage/rofi-connman.git`
+1. `cd rofi-connman`
+1. `./rofi-connman`
 1. (Optional) For easy access, add the script somewhere in your `$PATH`.
+
+## Configuration
+
+**rofi-connman** supports 3 env variables:
+
+1. `ROFI_COMMAND`: main menu command, to assign more lightweight alternatives like [dmenu](https://tools.suckless.org/dmenu/)
+1. `ROFI_PROMPT_COMMAND`: general prompt command, for additional info input, like SSID
+1. `PIN_PROMPT_COMMAND`: password prompt command, for password input; with some extra scripting even [pinentry-dmenu](https://github.com/ritze/pinentry-dmenu) can be used
+
+Additionally, use of `mawk` is encouraged if you have thousands of VPN profiles. Once installed, **rofi-connman** will automatically prefer it over other awk interpreters.
 
 ### Polybar configuration
 
-`NOTE:` In order to properly display the bluetooth icon, you will need to use an iconic font in your bar, e.g. [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts)
+**NOTE:** In order to properly display the network icon, you will need to use an iconic font in your bar, e.g. [Siji](https://github.com/stark/siji)
 
-```
-[module/bluetooth]
+```ini
+[module/connman]
 type = custom/script
-exec = rofi-bluetooth --status
-interval = 1
-click-left = rofi-bluetooth &
+exec = rofi-connman --status
+interval = 2
+
+click-left = rofi-connman > /dev/null &
+click-right = rofi-connman --toggle &
 ```
 
-### i3 keybinding
+### sxhkd hotkey
 
+```text
+alt + c
+	rofi-connman
 ```
-bindsym $mod+b exec --no-startup-id rofi-bluetooth
-```
-
-### Thanks for the inspiration!
-
-- [firecat53/networkmanager-dmenu](https://github.com/firecat53/networkmanager-dmenu)
-- [x70b1's bluetoothctl polybar script](https://github.com/polybar/polybar-scripts/tree/master/polybar-scripts/system-bluetooth-bluetoothctl)

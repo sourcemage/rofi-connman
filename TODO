@@ -1,0 +1,10 @@
+- Ethernet connection handling
+- Manual IPv4 config
+- IPv6 support
+- Manual IPv6 config
+- Custom nameservers
+- Custom NTP servers
+- Proxy support
+- Switching between manual & DHCP config
+- Connection errors handling
+- sexpect support
