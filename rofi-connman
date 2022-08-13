@@ -45,7 +45,11 @@ pin_prompt=${PIN_PROMPT_COMMAND:-"rofi -dmenu -l 0 -password -p"}
 # ----------+
 # Utilities |
 
-awk="awk"
+if type mawk > /dev/null 2>&1; then
+  awk="mawk"
+else
+  awk="awk"
+fi
 
 # -----------------+
 # Helper functions |
@@ -191,15 +195,18 @@ parse_services() {
 
 # Refresh services
 refresh_services() {
-  connmanctl services | $awk '{ flags=substr($0, 0, 3);
-                                ln=substr($0, 5, length - 4);
-                                service_id=$NF; $NF="";
-                                match(service_id, /wifi_[0-9a-f]+_(hidden_.+)/, sid);
-                                length(sid[1]) != 0 ? name=sid[1] : name=substr(ln, 0, length(ln) - length(service_id));
-                                gsub(/\s+$/, "", name);
-                                gsub(/[^a-zA-Z0-9-]/, "_", name);
-                                gsub(/\s/, "-", flags);
-                              } { print flags, name, service_id }' > "$scan_result"
+  connmanctl services | $awk '
+{
+    flags = substr($0, 1, 3)
+    gsub(/[ \t]/, "-", flags)
+    name = service_id = $NF
+    if (!sub(/^wifi_[0-9a-f]+_/, "", name) || name !~ /^hidden_/) {
+        name = substr($0, 5, length - length($NF) - 5)
+        sub(/[ \t]+$/, "", name)
+        gsub(/[^a-zA-Z0-9-]/, "_", name)
+    }
+    print flags, name, service_id
+}' > "$scan_result"
 }
 
 # Checks if a service is insecure
