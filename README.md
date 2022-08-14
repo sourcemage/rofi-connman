@@ -35,6 +35,10 @@
 1. `./rofi-connman`
 1. (Optional) For easy access, add the script somewhere in your `$PATH`.
 
+### Arch-based distributions
+
+1. [rofi-connman](https://aur.archlinux.org/packages/rofi-connman) is available in AUR.
+
 ## Configuration
 
 **rofi-connman** supports 3 env variables:
