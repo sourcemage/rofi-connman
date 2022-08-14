@@ -18,7 +18,7 @@
 # Depends on:
 # - rofi or dmenu
 # - connman (contains connmanctl)
-# - empty
+# - empty or sexpect
 #
 # Utilities:
 # - awk
@@ -28,7 +28,9 @@
 # Constants |
 
 divider="---------"
+scan="Rescan"
 goback="Back"
+exit="Exit"
 
 readonly scan_result="/tmp/connman.scan"
 
@@ -45,11 +47,28 @@ pin_prompt=${PIN_PROMPT_COMMAND:-"rofi -dmenu -l 0 -password -p"}
 # ----------+
 # Utilities |
 
-if type mawk > /dev/null 2>&1; then
-  awk="mawk"
-else
-  awk="awk"
-fi
+check_utilities() {
+  # awk
+  if type mawk >& /dev/null; then
+    awk="mawk"
+  elif type gawk >& /dev/null; then
+    awk="gawk"
+  else
+    rofi_notify "Neither mawk(1) nor gawk(1) was found"
+
+    exit 1
+  fi
+  # expect
+  if type sexpect >& /dev/null; then
+    service_connect_advanced() { service_connect_sexpect "$@"; }
+  elif type empty >& /dev/null; then
+    service_connect_advanced() { service_connect_empty "$@"; }
+  else
+    rofi_notify "Neither empty(1) nor sexpect(1) was found"
+
+    exit 1
+  fi
+}
 
 # -----------------+
 # Helper functions |
@@ -105,7 +124,7 @@ get_service_name() {
 
 # $1 = service id, $2 = field
 get_service_info() {
-  connmanctl services "$1" | $awk -v field="$2" '$1 == field { print $3 }'
+  connmanctl services "$1" | $awk -v field="$2" '$1 == field { $1 = $2 = ""; sub(/^[ ]+/, "", $0); print field == "Name" ? $0 : $1 }'
 }
 
 get_services() {
@@ -146,7 +165,7 @@ get_services() {
       ;;
     esac
 
-    printf '%4s  %-50s%9s %-3s %s\n' "$order" "$name" "$security" "$signal" "$online"
+    printf '%4s  %-40s%9s %-3s %s\n' "$order" "$name" "$security" "$signal" "$online"
 
     (( order++ ))
   done < "$scan_result"
@@ -281,11 +300,15 @@ service_connect() {
     connmanctl connect "$service"
   else
     service_connect_advanced "$service"
+    # wrong password
+    [ $? -eq 2 ] && rofi_notify "Wrong password"
   fi
 }
 
-# Service connection (advanced)
-service_connect_advanced() {
+# Service connection (advanced:empty)
+service_connect_empty() {
+  printf "Using empty...\n"
+
   empty -f connmanctl
 
   sleep 1
@@ -303,9 +326,11 @@ service_connect_advanced() {
 
       rcp=$?
 
-      [ $rcp -eq 1 ] && return 1
+      empty_check $rcp 0 || return 1
 
       printf "${ssid}\n" | empty -s
+    else
+      return 1
     fi
 
     if ! insecure_on; then
@@ -313,36 +338,62 @@ service_connect_advanced() {
 
       rc=$?
     else
-      rc=$rcp
+      rc=1
     fi
-
-    [ $rcp -eq 1 ] && return 1
   else
     empty_check $rc 1 && empty -w "Passphrase\?"
 
     rc=$?
   fi
 
-  rc=$rc
-
   if ! insecure_on; then
     if empty_check $rc 1; then
       pin=$($pin_prompt "Password")
 
-      rcp=$?
-
-      [ $rcp -eq 1 ] && return 1
+      empty_check $? 0 || return 1
 
       printf "${pin}\n" | empty -s
+    else
+      return 1
     fi
-  else
-    rcp=$rc
   fi
 
-  empty_check $rcp 0 && empty -w "Connected ${service}" "quit\n"
-  empty_check $? 1
+  # wait until connman processes the command to grab all output
+  sleep 10
 
-  return $?
+  out="$(empty -r -t 5)"
+
+  empty_check $? 0 || return 1
+
+  case "$out" in
+    *Connected*)
+      rc=0
+
+      empty -s "quit\n"
+    ;;
+    *Passphrase\ required*)
+      rc=2
+    ;;
+    *)
+      rc=1
+
+      empty -w "Passphrase\?" "${pin}\n"
+
+      if empty_check $? 1; then
+        empty -w "Connected"
+
+        empty_check $? 1
+
+        rc=$?
+
+        empty -s "quit\n"
+      fi
+    ;;
+  esac
+
+  empty_check $rc 0
+
+  return $rc
 }
 
 empty_check() {
@@ -357,6 +408,143 @@ empty_check() {
 
     empty -k && return 1
   fi
+}
+
+# Service connection (advanced:sexpect)
+service_connect_sexpect() {
+  printf "Using sexpect...\n"
+
+  export SEXPECT_SOCKFILE="$(sexpect_sockfile)"
+
+  sexpect spawn -idle 60 -t 5 -autowait connmanctl
+
+  sleep 1
+
+  sexpect_send "agent on"
+  sexpect_expect "Agent registered"
+
+  rc=$?
+
+  sexpect_check $rc 0 || return 1
+
+  sexpect_send "connect ${service}"
+
+  if hidden_on; then
+    sexpect_expect "Hidden SSID name?"
+
+    if sexpect_check $? 0; then
+      ssid="$($rofi_prompt "SSID")"
+
+      rcp=$?
+
+      sexpect_check $rcp 0 || return 1
+
+      sexpect_send "$ssid"
+    else
+      return 1
+    fi
+
+    if ! insecure_on; then
+      sexpect_check $rcp 0 && sexpect_expect "Passphrase?"
+
+      rc=$?
+    else
+      rc=0
+    fi
+  else
+    sexpect_check $rc 0 && sexpect_expect "Passphrase?"
+
+    rc=$?
+  fi
+
+  if ! insecure_on; then
+    if sexpect_check $rc 0; then
+      pin=$($pin_prompt "Password")
+
+      sexpect_check $? 0 || return 1
+
+      sexpect_send "$pin"
+    else
+      return 1
+    fi
+  fi
+
+  # wait until connman processes the command to grab all output
+  sleep 10
+
+  sexpect_expect -a
+
+  sexpect_check $? 0 || return 1
+
+  out="$(sexpect expect_out)"
+
+  case "$out" in
+    *Connected*)
+      rc=0
+
+      sexpect_send "quit"
+    ;;
+    *Passphrase\ required*)
+      rc=2
+    ;;
+    *)
+      rc=1
+
+      case "$out" in
+        *Passphrase\?*)
+          sexpect_send "$pin"
+
+          sexpect_expect "Connected ${service}"
+
+          sexpect_check $? 0
+
+          rc=$?
+
+          sexpect_send "quit"
+        ;;
+      esac
+    ;;
+  esac
+
+  sexpect_check $rc 0
+
+  return $rc
+}
+
+sexpect_send() {
+  export SEXPECT_SEND="$1"
+
+  sexpect send -cr -env SEXPECT_SEND
+}
+
+sexpect_expect() {
+  if [ "$1" == "-a" ]; then
+    exact=""
+
+    shift
+  else
+    exact="-exact"
+  fi
+
+  sexpect expect $exact "$@" > /dev/null
+}
+
+sexpect_check() {
+  if [ $1 -eq $2 ]; then
+    return 0
+  else
+    if [ $1 -eq 1 -o $1 -eq 2 ]; then
+      printf "Cancelled\n" >&2
+    else
+      printf "Error while communicating to connman\n" >&2
+    fi
+
+    sexpect kill && return 1
+  fi
+}
+
+sexpect_sockfile() {
+  $awk -v min=1 -v max=1000 'BEGIN { srand(); printf "/tmp/sexpect-connman-%d.sock", int(min + rand() * (max - min + 1)) }'
 }
 
 # Checks if a service is connected
@@ -410,8 +598,6 @@ print_status() {
 service_menu() {
   service="$1"
 
-  exit="Exit"
-
   # Get service name
   service_name="$(get_service_name "$service")"
 
@@ -433,7 +619,7 @@ service_menu() {
   chosen="$(printf "$options" | $rofi "$service_name")"
 
   # Match chosen option to command
-  case $chosen in
+  case "$chosen" in
     "" | $divider)
       printf "No option chosen.\n"
     ;;
@@ -456,17 +642,12 @@ service_menu() {
 show_menu() {
   refresh_services
 
-  exit="Exit"
-
   # Get menu options
   if power_on; then
     power="Power: on"
 
     # Human-readable names of services, one per line
     services="$(get_services)"
-
-    # Build options
-    scan="Rescan"
 
     # Options passed to rofi
     options="${services}\n${divider}\n${power}\n${scan}\n${exit}"
@@ -480,7 +661,7 @@ show_menu() {
   chosen="$(printf "$options" | $rofi "Connman")"
 
   # Match chosen option to command
-  case $chosen in
+  case "$chosen" in
     "" | $divider)
       printf "No option chosen.\n"
     ;;
@@ -495,26 +676,37 @@ show_menu() {
     ;;
     *)
       index=$(printf "$chosen" | $awk '{ print $1 }')
-      service=$(index_to_service $index)
+      service="$(index_to_service $index)"
+      name="$(index_to_name $index)"
 
       if expr "$(connmanctl services "$service")" : "/net/connman/service/${service}" > /dev/null; then
         # Open a submenu if a service is selected
         service_menu "$service"
+      else
+        rofi_notify "Service ${name} is not available"
+
+        show_menu
       fi
     ;;
   esac
 }
 
-parse_services
+main() {
+  parse_services
 
-case "$1" in
-  --status)
-    print_status
-  ;;
-  --toggle)
-    toggle_power quiet
-  ;;
-  *)
-    show_menu
-  ;;
-esac
+  case "$1" in
+    --status)
+      print_status
+    ;;
+    --toggle)
+      toggle_power quiet
+    ;;
+    *)
+      show_menu
+    ;;
+  esac
+}
+
+check_utilities
+
+main "$@"

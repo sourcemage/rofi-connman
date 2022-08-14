@@ -4,7 +4,7 @@
 <img src="https://github.com/sourcemage/rofi-connman/raw/master/.meta/prev.gif">
 </a>
 
-`connmanctl` `rofi` `dmenu` `empty`
+`connmanctl` `rofi` `dmenu` `empty` `sexpect`
 
 </div>
 
@@ -43,7 +43,9 @@
 1. `ROFI_PROMPT_COMMAND`: general prompt command, for additional info input, like SSID
 1. `PIN_PROMPT_COMMAND`: password prompt command, for password input; with some extra scripting even [pinentry-dmenu](https://github.com/ritze/pinentry-dmenu) can be used
 
-Additionally, use of `mawk` is encouraged if you have thousands of VPN profiles. Once installed, **rofi-connman** will automatically prefer it over other awk interpreters.
+If [sexpect](https://github.com/clarkwang/sexpect) is installed, it'll be used instead of `empty`.
+
+Additionally, use of [mawk](https://invisible-island.net/mawk/) is encouraged if you have thousands of VPN profiles. Once installed, **rofi-connman** will automatically prefer it over other awk interpreters.
 
 ### Polybar configuration
 

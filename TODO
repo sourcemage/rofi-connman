@@ -1,4 +1,4 @@
-- Ethernet connection handling
+- WPS support
 - Manual IPv4 config
 - IPv6 support
 - Manual IPv6 config
@@ -6,5 +6,4 @@
 - Custom NTP servers
 - Proxy support
 - Switching between manual & DHCP config
-- Connection errors handling
-- sexpect support
+- Better connection error handling
