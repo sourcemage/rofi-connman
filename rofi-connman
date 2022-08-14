@@ -27,6 +27,8 @@
 # ----------+
 # Constants |
 
+version="0.1"
+
 divider="---------"
 scan="Rescan"
 goback="Back"
@@ -700,6 +702,9 @@ main() {
     ;;
     --toggle)
       toggle_power quiet
+    ;;
+    --version)
+      printf "%s %s\n" $(basename $0) $version
     ;;
     *)
       show_menu
