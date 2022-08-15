@@ -694,7 +694,6 @@ show_menu() {
 }
 
 main() {
-  parse_services
 
   case "$1" in
     --status)
@@ -707,6 +706,8 @@ main() {
       printf "%s %s\n" $(basename $0) $version
     ;;
     *)
+      parse_services
+
       show_menu
     ;;
   esac
