@@ -584,8 +584,22 @@ print_status() {
   icon=""
 
   if power_on; then
-    status=$(connmanctl services | $awk '{ flags=substr($0, 0, 3); } flags ~ /[OR]/ { split($3, sec, "_");
-                                           if (NR > 1) { printf "," }; printf " %s (%s)", $2, sec[1] } END { printf "" }')
+    status=$(connmanctl services | $awk '
+{
+    flags = substr($0, 0, 3)
+    sub(/^..../, "", $0)
+} flags ~ /[OR]/ {
+    split($NF, sec, "_")
+    if (NR > 1) {
+        printf ", "
+    }
+    s = substr($0, 0, length - length($NF))
+    sub(/^[ \t]+|[ \t]+$/, "", s)
+    printf "%s (%s)", s, sec[1]
+} END {
+    printf ""
+}'
+)
 
     # colorize icon
     expr "$status" : '.*(vpn)' > /dev/null && icon="" icon="%{F#55aa55}${icon}%{F-}"
@@ -593,7 +607,7 @@ print_status() {
     icon="%{F#555}${icon}%{F-}"
   fi
 
-  printf "%s\n" "${icon}${status}"
+  printf "%s\n" "${icon} ${status}"
 }
 
 # A submenu for a specific service
