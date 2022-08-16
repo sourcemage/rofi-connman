@@ -12,7 +12,7 @@
 
 **rofi-connman** is a graphical frontend for `connman`, lightweight network connection manager. It's an excellent choice for those who want to have a flexible menu-driven network configuration tool without hassle and unnecessary dependencies other network managers require.
 
-**rofi-connman** was designed with speed in mind to be able to display over 5000 NordVPN profiles with no significant delay.
+**rofi-connman** was designed with speed in mind to be able to display over 10000 NordVPN profiles with no significant delay.
 
 ## Features
 

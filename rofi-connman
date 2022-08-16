@@ -167,7 +167,7 @@ get_services() {
       ;;
     esac
 
-    printf '%4s  %-40s%9s %-3s %s\n' "$order" "$name" "$security" "$signal" "$online"
+    printf '%5s  %-40s%9s %-3s %s\n' "$order" "$name" "$security" "$signal" "$online"
 
     (( order++ ))
   done < "$scan_result"
