@@ -129,6 +129,11 @@ get_service_info() {
   connmanctl services "$1" | $awk -v field="$2" '$1 == field { $1 = $2 = ""; sub(/^[ ]+/, "", $0); print field == "Name" ? $0 : $1 }'
 }
 
+# $1 = service id
+get_service_iface() {
+  connmanctl services "$1" | $awk '$1 == "Ethernet" { match($0, /Interface=([^, ]+)/); print substr($0, RSTART + 10, RLENGTH - 10) }'
+}
+
 get_services() {
   [ -f "$scan_result" ] || return 1
 
@@ -164,6 +169,9 @@ get_services() {
       ;;
       vpn_*)
         security='vpn'
+      ;;
+      ethernet_*)
+        name+=":$(get_service_iface "$service_id")"
       ;;
     esac
 
@@ -595,7 +603,13 @@ print_status() {
     }
     s = substr($0, 0, length - length($NF))
     sub(/^[ \t]+|[ \t]+$/, "", s)
-    printf "%s (%s)", s, sec[1]
+    if (sec[1] == "ethernet") {
+      cmd="connmanctl services " $NF
+
+      while (cmd | getline) { if ($1 == "Ethernet") { match($0, /Interface=([^, ]+)/); printf "%s (%s:%s)", s, sec[1], substr($0, RSTART + 10, RLENGTH - 10) } }
+    } else {
+      printf "%s (%s)", s, sec[1]
+    }
 } END {
     printf ""
 }'
