@@ -586,6 +586,28 @@ toggle_connection() {
   fi
 }
 
+# Switches service priority
+switch_priority() {
+  pair=($(connmanctl services | $awk -v service="$service" '
+substr($0, 0, 3) ~ /[RO]/ && $NF == service {
+    prev=$NF; getline; print (last ? last : prev) "\n" (substr($0, 0, 3) ~ /[RO]/ ? $NF : prev)
+} {
+    last=$NF
+}'
+))
+
+  case $1 in
+    up)
+      [ "${pair[0]}" != "$service" ] && connmanctl move-before "$service" "${pair[0]}"
+    ;;
+    down)
+      [ "${pair[1]}" != "$service" ] && connmanctl move-after "$service" "${pair[1]}"
+    ;;
+  esac
+
+  priority_menu "$service"
+}
+
 # Prints a short string with the current connection status
 # Useful for status bars like polybar, etc.
 print_status() {
@@ -624,6 +646,38 @@ print_status() {
   printf "%s\n" "${icon} ${status}"
 }
 
+# A submenu for priority change
+priority_menu() {
+  service="$1"
+
+  # Get service name
+  service_name="$(get_service_name "$service")"
+
+  up="Up"
+  down="Down"
+
+  options="${up}\n${down}\n${divider}\n${goback}\n${exit}"
+
+  # Open rofi menu, read chosen option
+  chosen="$(printf "$options" | $rofi "$service_name")"
+
+  # Match chosen option to command
+  case "$chosen" in
+    "" | $divider)
+      printf "No option chosen.\n"
+    ;;
+    $up)
+      switch_priority up
+    ;;
+    $down)
+      switch_priority down
+    ;;
+    $goback)
+      service_menu "$service"
+    ;;
+  esac
+}
+
 # A submenu for a specific service
 service_menu() {
   service="$1"
@@ -642,8 +696,9 @@ service_menu() {
 
   autoconnect="$(autoconnect_on "$service")"
   favorite="$(favorite_on "$service")"
+  priority="Priority"
 
-  options="${connected}\n${autoconnect}\n${favorite}\n${divider}\n${goback}\n${exit}"
+  options="${connected}\n${autoconnect}\n${favorite}\n${priority}\n${divider}\n${goback}\n${exit}"
 
   # Open rofi menu, read chosen option
   chosen="$(printf "$options" | $rofi "$service_name")"
@@ -661,6 +716,9 @@ service_menu() {
     ;;
     $favorite)
       toggle_favorite
+    ;;
+    $priority)
+      priority_menu "$service"
     ;;
     $goback)
       show_menu
