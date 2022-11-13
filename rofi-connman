@@ -387,17 +387,19 @@ service_connect_empty() {
     *)
       rc=1
 
-      empty -w "Passphrase\?" "${pin}\n"
+      case "$out" in
+        *Passphrase\?*)
+          printf "${pin}\n" | empty -s
 
-      if empty_check $? 1; then
-        empty -w "Connected"
+          empty -w "Connected ${service}"
 
-        empty_check $? 1
+          empty_check $? 1
 
-        rc=$?
+          rc=$?
 
-        empty -s "quit\n"
-      fi
+          empty -s "quit\n"
+        ;;
+      esac
     ;;
   esac
 
