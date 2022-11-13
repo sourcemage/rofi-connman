@@ -22,6 +22,7 @@
 1. Connecting to unprotected Wi-Fi networks
 1. Connecting to hidden Wi-Fi networks
 1. Connecting to pre-defined VPN networks
+1. Switching service priority
 1. Custom commands for main menu, prompt and PIN prompt (so `rofi` can easily be replaced with `dmenu`)
 1. Wi-Fi network info (name, signal strength, state, security level, autoconnect status, favorites)
 1. Bar status mode (for bars like [polybar](https://github.com/polybar/polybar))
