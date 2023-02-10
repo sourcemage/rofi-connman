@@ -31,7 +31,7 @@
 ## Installation
 
 1. Install dependencies: [rofi](https://github.com/davatorium/rofi), `connmanctl` (provided by [connman](https://www.kernel.org/pub/linux/network/connman/)) and `empty` (provided by [empty](http://empty.sourceforge.net/))
-1. `git clone git@github.com:sourcemage/rofi-connman.git`
+1. `git clone --depth=1 git@github.com:sourcemage/rofi-connman.git`
 1. `cd rofi-connman`
 1. `./rofi-connman`
 1. (Optional) For easy access, add the script somewhere in your `$PATH`.
