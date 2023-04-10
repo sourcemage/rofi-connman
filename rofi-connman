@@ -342,22 +342,21 @@ priority() {
 
 # Switches service priority
 switch_priority() {
-  pair=($(connmanctl services | $awk -v service="$service" '
+  connmanctl services | $awk -v direction="$1" -v service="$service" '
 substr($0, 0, 3) ~ /[RO]/ && $NF == service {
-    prev=$NF; getline; print (last ? last : prev) "\n" (substr($0, 0, 3) ~ /[RO]/ ? $NF : prev)
+    prev=$NF; getline; top=(last ? last : prev); bottom=(substr($0, 0, 3) ~ /[RO]/ ? $NF : prev)
 } {
     last=$NF
+} END {
+    if (direction == "up") {
+        s=top; m="before"
+    } else {
+        s=bottom; m="after"
+    }
+    if (s != service) {
+        system("connmanctl move-" m " " service " " s)
+    }
 }'
-))
-
-  case $1 in
-    up)
-      [ "${pair[0]}" != "$service" ] && connmanctl move-before "$service" "${pair[0]}"
-    ;;
-    down)
-      [ "${pair[1]}" != "$service" ] && connmanctl move-after "$service" "${pair[1]}"
-    ;;
-  esac
 
   priority_menu "$service"
 }
