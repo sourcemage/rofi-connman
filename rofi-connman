@@ -51,9 +51,9 @@ pin_prompt=${PIN_PROMPT_COMMAND:-"rofi -dmenu -l 0 -password -p"}
 
 check_utilities() {
   # awk
-  if type mawk >& /dev/null; then
+  if type mawk >/dev/null 2>&1; then
     awk="mawk"
-  elif type gawk >& /dev/null; then
+  elif type gawk >/dev/null 2>&1; then
     awk="gawk"
   else
     rofi_notify "Neither mawk(1) nor gawk(1) was found"
@@ -61,9 +61,9 @@ check_utilities() {
     exit 1
   fi
   # expect
-  if type sexpect >& /dev/null; then
+  if type sexpect >/dev/null 2>&1; then
     service_connect_advanced() { service_connect_sexpect "$@"; }
-  elif type empty >& /dev/null; then
+  elif type empty >/dev/null 2>&1; then
     service_connect_advanced() { service_connect_empty "$@"; }
   else
     rofi_notify "Neither empty(1) nor sexpect(1) was found"
@@ -173,13 +173,13 @@ get_services() {
 
     case "$flags" in
       *[RO]*)
-        online='(online)'
+        online="(online)"
       ;;
     esac
 
     case "$flags" in
       *[A]*)
-        online+=' *'
+        online="${online} *"
       ;;
     esac
 
@@ -192,19 +192,19 @@ get_services() {
         security='vpn'
       ;;
       ethernet_*)
-        name+=":$(get_service_iface "$service_id")"
+        name="${name}:$(get_service_iface "$service_id")"
       ;;
     esac
 
     printf '%5s  %-40s%9s %-3s %s\n' "$order" "$name" "$security" "$signal" "$online"
 
-    (( order++ ))
+    order=$(( order + 1 ))
   done < "$scan_result"
 }
 
 # Checks if wifi technology is powered on
 power_on() {
-  if [ "$(connmanctl technologies | $awk '/Type = wifi/ { getline; print $3 }')" == "True" ]; then
+  if [ "$(connmanctl technologies | $awk '/Type = wifi/ { getline; print $3 }')" = "True" ]; then
     return 0
   else
     return 1
@@ -219,7 +219,7 @@ toggle_power() {
     connmanctl enable wifi
   fi
 
-  [ "$1" == "quiet" ] || show_menu
+  [ "$1" = "quiet" ] || show_menu
 }
 
 # Perform a scan
@@ -261,7 +261,7 @@ refresh_services() {
 
 # Checks if a service is insecure
 insecure_on() {
-  if [ "$(get_service_security "$service")" == "none" ]; then
+  if [ "$(get_service_security "$service")" = "none" ]; then
     return 0
   else
     return 1
@@ -270,7 +270,7 @@ insecure_on() {
 
 # Checks if a service is autoconnected
 autoconnect_on() {
-  if [ $(get_service_autoconnect "$service") == "True" ]; then
+  if [ $(get_service_autoconnect "$service") = "True" ]; then
     printf "Autoconnect: on\n"
 
     return 0
@@ -296,7 +296,7 @@ toggle_autoconnect() {
 
 # Checks if a service is in favorites
 favorite_on() {
-  if [ "$(get_service_favorite "$service")" == "True" ]; then
+  if [ "$(get_service_favorite "$service")" = "True" ]; then
     printf "Favorite: yes\n"
 
     return 0
@@ -587,7 +587,7 @@ sexpect_send() {
 }
 
 sexpect_expect() {
-  if [ "$1" == "-a" ]; then
+  if [ "$1" = "-a" ]; then
     exact=""
 
     shift
@@ -702,7 +702,7 @@ priority_menu() {
     options="${up}\n${down}\n"
   fi
 
-  options+="${divider}\n${goback}\n${exit}"
+  options="${options}${divider}\n${goback}\n${exit}"
 
   # Open rofi menu, read chosen option
   chosen="$(printf "%b" "$options" | $rofi "$service_name")"
