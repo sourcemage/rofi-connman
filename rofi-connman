@@ -27,7 +27,7 @@
 # ----------+
 # Constants |
 
-version="0.5-dev"
+version="0.5"
 
 divider="---------"
 scan="Rescan"
